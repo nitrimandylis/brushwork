@@ -36,8 +36,8 @@ filter, not a model that has memorised Van Gogh: it decides where a stroke goes,
 which way it points, how many hairs the brush has and how much paint each one is
 still carrying, then it puts that stroke down and looks at what is left to fix.
 
-The placement is Hertzmann's layered algorithm from 1998. Three to five
-coarse-to-fine passes, each one comparing the canvas against a blurred reference
+The placement is Hertzmann's layered algorithm from 1998. Four coarse-to-fine
+passes by default, each one comparing the canvas against a blurred reference
 and seeding a stroke only where the canvas is currently wrong. Flat sky earns a
 handful of broad strokes. A treeline earns hundreds of fine ones. Strokes run
 perpendicular to the luminance gradient, which is why the paint appears to follow
