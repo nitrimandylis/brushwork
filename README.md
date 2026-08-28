@@ -72,10 +72,20 @@ Needs Node 18.17 or newer. sharp ships prebuilt binaries, so there is nothing to
 compile.
 
 ```bash
-bun install -g brushwork    # or: npm install -g brushwork
-brushwork photo.jpg --sheet             # decide which style suits it
+bun install -g brushwork                      # or: npm install -g brushwork
+brushwork photo.jpg --sheet                   # decide which style suits it
 brushwork photo.jpg --style oil --brush 1.4   # then render it properly
 ```
+
+Or without installing anything, for a one-off:
+
+```bash
+npx brushwork photo.jpg --style oil
+```
+
+Installing is the better default. One sitting is usually a sheet, a preview, a
+render and then a second render with the numbers moved, and npx re-resolves the
+package on every one of those.
 
 A full 4K render takes about seven seconds. `--preview` does the same picture at
 1200px in under one, which is what you want while you are still dialling flags in.

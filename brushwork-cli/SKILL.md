@@ -10,8 +10,11 @@ A command-line tool that repaints an image as brush strokes. File in, file out.
 ## Setup
 
 `brushwork <image>` should be on PATH. If it is not, it has not been installed:
-offer to run `bun install -g brushwork` (or `npm install -g brushwork`). Inside a
-clone of the repo, `bun src/cli.ts` works without installing anything.
+offer to run `bun install -g brushwork` (or `npm install -g brushwork`). For a
+single render on a machine you do not want to install onto, `npx brushwork ...`
+works, but it re-resolves the package every call, so install it before any
+session that will run more than one or two. Inside a clone of the repo,
+`bun src/cli.ts` works without installing anything.
 
 Needs Node 18.17+. Its one dependency, sharp, ships prebuilt binaries.
 

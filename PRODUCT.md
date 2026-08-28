@@ -152,7 +152,16 @@ so the test does not catch them.
 
 ## Distribution
 
-Ships on npm: `bun install -g brushwork`, or `npm install -g brushwork`. Not a
+Ships on npm: `bun install -g brushwork`, or `npm install -g brushwork`, with
+`npx brushwork` for a one-off. All three were verified against a packed tarball,
+npx from a clean cache included, which is what proves sharp's platform prebuild
+resolves on a machine that has never seen it. Global install leads in the docs
+rather than npx, unlike agent-wrapped: this tool gets called several times per
+sitting, so a per-call resolve is felt.
+
+If npm rejects the bare name at publish time for resembling something already
+there, the fallback is scoping to `@nitrimandylis/brushwork`. The `bin` name is
+independent of the package name, so the command stays `brushwork` either way. Not a
 compiled binary, because sharp is a native NAPI addon that `bun build --compile`
 bundles and then cannot load at runtime (`Could not load the "sharp" module using
 the darwin-arm64 runtime`). Verified on Bun 1.3.10.
