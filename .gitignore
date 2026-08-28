@@ -1,6 +1,8 @@
 node_modules/
 dist/
 sheets/
+.DS_Store
+.env*
 *.oil.png
 *.water.png
 *.ink.png
