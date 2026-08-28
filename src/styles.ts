@@ -10,6 +10,10 @@ export type Style = {
   lengthFactor: number; // how far a stroke may travel, as a fraction of the maximum
   paper: [number, number, number] | null; // starting canvas; null = blurred underpainting
   edgeDarken: number; // watercolour pigment pooling at a wash boundary, 0 = off
+  substrate: "canvas" | "paper"; // what the medium is worked on
+  substrateStrength: number; // how far the tooth shows through the paint
+  dryness: number; // how readily a bristle skips over the substrate
+  relief: number; // how thickly the paint stands off the surface, 0 = flat
 };
 
 export const STYLES: Record<string, Style> = {
@@ -23,6 +27,10 @@ export const STYLES: Record<string, Style> = {
     lengthFactor: 1,
     paper: null,
     edgeDarken: 0,
+    substrate: "canvas",
+    substrateStrength: 0.1,
+    dryness: 0.35,
+    relief: 0.4,
   },
   water: {
     bristles: 3,
@@ -34,6 +42,10 @@ export const STYLES: Record<string, Style> = {
     lengthFactor: 1,
     paper: [255, 255, 255],
     edgeDarken: 0.35,
+    substrate: "paper",
+    substrateStrength: 0.16,
+    dryness: 0.5,
+    relief: 0, // a wash sinks into the paper, it does not stand off it
   },
   ink: {
     bristles: 1,
@@ -45,6 +57,10 @@ export const STYLES: Record<string, Style> = {
     lengthFactor: 0.3, // hatching is short marks, not long wandering lines
     paper: [255, 255, 255],
     edgeDarken: 0,
+    substrate: "paper",
+    substrateStrength: 0.08, // a light tooth; ink is dark on white, so grain reads as speckle
+    dryness: 0.32, // a nib skips over paper fibre, but it still has to leave a line
+    relief: 0,
   },
 };
 

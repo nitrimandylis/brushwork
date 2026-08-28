@@ -1,11 +1,24 @@
 import { blur, padMirror, type Image } from "./image";
+import { applyRelief, applySubstrate, grainAt, makeGrain } from "./texture";
 import { STYLES, type Style, type StyleName } from "./styles";
 
 export type PaintOptions = {
   style: StyleName;
   brush: number; // multiplies the whole radius ladder
   detail: number; // how far below the widest brush the ladder reaches
+  texture: number; // 0 = smooth paint on a smooth surface, 1 = full substrate, dry brush and relief
   seed: number;
+};
+
+// Everything a stroke paints onto: the picture, what has been touched, how
+// thickly, and the surface it is being worked on.
+type Surface = {
+  canvas: Float32Array;
+  coverage: Uint8Array;
+  thickness: Float32Array;
+  grain: Float32Array;
+  width: number;
+  height: number;
 };
 
 export type PaintResult = {
@@ -18,7 +31,7 @@ export type PaintResult = {
 
 const MIN_STROKE_STEPS = 4;
 const MAX_STROKE_STEPS = 10;
-const BLUR_FACTOR = 0.5; // the reference image a layer paints towards
+const BLUR_FACTOR = 0.3; // the reference image a layer paints towards
 const CURVATURE_FILTER = 0.5; // 1 = a stroke turns freely, 0 = it never turns
 const LADDER_RANGE = 8; // widest brush over finest, before --detail scales it
 const BASE_THRESHOLD = 25;
@@ -27,7 +40,9 @@ const FLAT_GRADIENT = 0.25;
 // Every stroke leans a few degrees off the direction it was handed. Perfectly
 // parallel strokes on a regular grid read as scan lines, most visibly in a
 // smooth sky, which no hand-made mark ever does.
-const ANGLE_JITTER = 0.18; // radians, about ten degrees // mean colour error a grid cell needs before it earns a stroke
+const ANGLE_JITTER = 0.18; // radians, about ten degrees
+const THICKNESS_PER_COAT = 0.35; // how much one opaque dab raises the surface
+const GRAIN_FEATURE = 900; // image widths per substrate thread, so grain scales with the frame
 
 // Small deterministic RNG so --seed reproduces a render exactly.
 function mulberry32(seed: number): () => number {
@@ -183,8 +198,7 @@ function strokePath(
 
 // One round dab of paint with a one-pixel soft edge.
 function stamp(
-  canvas: Float32Array,
-  coverage: Uint8Array,
+  surface: Surface,
   cx: number,
   cy: number,
   radius: number,
@@ -193,9 +207,8 @@ function stamp(
   b: number,
   alpha: number,
   multiply: boolean,
-  w: number,
-  h: number,
 ): void {
+  const { canvas, coverage, thickness, width: w, height: h } = surface;
   let x0 = Math.floor(cx - radius);
   let x1 = Math.ceil(cx + radius);
   let y0 = Math.floor(cy - radius);
@@ -218,6 +231,11 @@ function stamp(
       const p = y * w + x;
       const i = p * 3;
       coverage[p] = 1;
+      // Paint builds up, but not without limit: a second coat of oil sits a
+      // little proud of the first, a tenth coat does not sit ten times proud.
+      // Left uncapped this saturates the relief pass into embossed plaster.
+      const built = thickness[p] + a * THICKNESS_PER_COAT;
+      thickness[p] = built > 1 ? 1 : built;
       if (multiply) {
         canvas[i] += ((canvas[i] * r) / 255 - canvas[i]) * a;
         canvas[i + 1] += ((canvas[i + 1] * g) / 255 - canvas[i + 1]) * a;
@@ -232,9 +250,12 @@ function stamp(
 }
 
 // One bristle: the stroke path shifted sideways, dabbed along its length.
+//
+// A bristle carries a finite amount of paint. As it runs out it stops bridging
+// the pits in the substrate and starts catching only the raised fibre, so the
+// mark breaks up and ends ragged instead of square.
 function drawBristle(
-  canvas: Float32Array,
-  coverage: Uint8Array,
+  surface: Surface,
   points: number[],
   offset: number,
   radius: number,
@@ -243,14 +264,23 @@ function drawBristle(
   b: number,
   alpha: number,
   multiply: boolean,
-  w: number,
-  h: number,
+  dryness: number,
 ): void {
   const n = points.length / 2;
   if (n === 1) {
-    stamp(canvas, coverage, points[0], points[1], radius, r, g, b, alpha, multiply, w, h);
+    stamp(surface, points[0], points[1], radius, r, g, b, alpha, multiply);
     return;
   }
+
+  let total = 0;
+  for (let i = 0; i < n - 1; i++) {
+    const dx = points[2 * i + 2] - points[2 * i];
+    const dy = points[2 * i + 3] - points[2 * i + 1];
+    total += Math.sqrt(dx * dx + dy * dy);
+  }
+  if (total <= 0) total = 1;
+
+  let travelled = 0;
   for (let i = 0; i < n - 1; i++) {
     let ax = points[2 * i];
     let ay = points[2 * i + 1];
@@ -268,23 +298,32 @@ function drawBristle(
     const steps = Math.max(1, Math.ceil(len / (radius * 0.5)));
     for (let s = 0; s <= steps; s++) {
       const t = s / steps;
-      stamp(canvas, coverage, ax + (bx - ax) * t, ay + (by - ay) * t, radius, r, g, b, alpha, multiply, w, h);
+      const px = ax + (bx - ax) * t;
+      const py = ay + (by - ay) * t;
+      let a = alpha;
+      if (dryness > 0) {
+        const load = 1 - dryness * ((travelled + len * t) / total);
+        const tooth = grainAt(surface.grain, Math.round(px), Math.round(py));
+        const carried = load - tooth * dryness;
+        if (carried <= 0) continue; // the bristle skipped here
+        a = alpha * (carried < 1 ? carried : 1);
+      }
+      stamp(surface, px, py, radius, r, g, b, a, multiply);
     }
+    travelled += len;
   }
 }
 
 // A loaded brush is many hairs, each carrying slightly different paint. That is
 // what makes a stroke read as a stroke instead of a slab of colour.
 function renderStroke(
-  canvas: Float32Array,
-  coverage: Uint8Array,
+  surface: Surface,
   points: number[],
   colour: [number, number, number],
   radius: number,
   style: Style,
+  texture: number,
   rng: () => number,
-  w: number,
-  h: number,
 ): void {
   const strokeWidth = 2 * radius * style.widthFactor;
   const count = style.mono
@@ -293,6 +332,7 @@ function renderStroke(
   const bristleRadius = Math.max(0.6, (strokeWidth / count) * 0.7);
   const span = Math.max(0, strokeWidth - bristleRadius * 2);
   const multiply = style.blend === "multiply";
+  const dryness = style.dryness * texture;
 
   let [r, g, b] = colour;
   let toneScale = 1;
@@ -315,7 +355,7 @@ function renderStroke(
     const jg = g + shade + (rng() - 0.5) * style.jitter * 0.3;
     const jb = b + shade + (rng() - 0.5) * style.jitter * 0.3;
     const alpha = style.alpha * toneScale * (0.6 + 0.4 * rng());
-    drawBristle(canvas, coverage, points, offset, bristleRadius, jr, jg, jb, alpha, multiply, w, h);
+    drawBristle(surface, points, offset, bristleRadius, jr, jg, jb, alpha, multiply, dryness);
   }
 }
 
@@ -333,14 +373,15 @@ function cellStarts(size: number, grid: number): number[] {
 // One coarse-to-fine pass: find the grid cells the canvas gets most wrong, and
 // seed a stroke at the worst pixel in each.
 function paintLayer(
-  canvas: Float32Array,
-  coverage: Uint8Array,
+  surface: Surface,
   ref: Image,
   radius: number,
   style: Style,
+  texture: number,
   threshold: number,
   rng: () => number,
 ): number {
+  const canvas = surface.canvas;
   const w = ref.width;
   const h = ref.height;
   const grid = Math.max(1, Math.round(radius));
@@ -386,15 +427,13 @@ function paintLayer(
     const points = strokePath(canvas, ref.data, seed, radius, maxSteps, w, h, rng);
     const i = seed * 3;
     renderStroke(
-      canvas,
-      coverage,
+      surface,
       points,
       [ref.data[i], ref.data[i + 1], ref.data[i + 2]],
       radius,
       style,
+      texture,
       rng,
-      w,
-      h,
     );
   }
 
@@ -443,8 +482,17 @@ export async function paint(src: Image, opts: PaintOptions): Promise<PaintResult
   const w = padded.width;
   const h = padded.height;
 
-  const canvas = new Float32Array(w * h * 3);
-  const coverage = new Uint8Array(w * h);
+  const texture = Math.min(1, Math.max(0, opts.texture));
+  const surface: Surface = {
+    canvas: new Float32Array(w * h * 3),
+    coverage: new Uint8Array(w * h),
+    thickness: new Float32Array(w * h),
+    grain: makeGrain(style.substrate, src.width / GRAIN_FEATURE, opts.seed),
+    width: w,
+    height: h,
+  };
+  const canvas = surface.canvas;
+  const coverage = surface.coverage;
 
   if (style.paper) {
     for (let i = 0; i < canvas.length; i += 3) {
@@ -466,10 +514,16 @@ export async function paint(src: Image, opts: PaintOptions): Promise<PaintResult
 
   for (const radius of radii) {
     const ref = await blur(padded, Math.max(0.5, BLUR_FACTOR * radius));
-    strokes += paintLayer(canvas, coverage, ref, radius, style, threshold, rng);
+    strokes += paintLayer(surface, ref, radius, style, texture, threshold, rng);
   }
 
   if (style.edgeDarken > 0) edgeDarken(canvas, w, h, style.edgeDarken);
+  if (texture > 0 && style.substrateStrength > 0) {
+    applySubstrate(canvas, surface.thickness, surface.grain, w, h, style.substrateStrength * texture);
+  }
+  if (texture > 0 && style.relief > 0) {
+    applyRelief(canvas, surface.thickness, w, h, style.relief * texture);
+  }
 
   return { ...crop(canvas, coverage, w, margin, src.width, src.height), strokes };
 }

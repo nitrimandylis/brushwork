@@ -21,6 +21,8 @@ options:
   --brush <n>      stroke size multiplier       (default: 1)
   --detail <n>     how fine the smallest brush goes, higher keeps more
                    of the original detail        (default: 1)
+  --texture <n>    canvas weave, dry brush and relief, 0 turns it off
+                                                 (default: 1)
   --seed <n>       same seed, same painting     (default: 1)
   --preview        render small and fast, for dialling flags in
   --sheet          one grid of every style at two brush sizes
@@ -78,7 +80,13 @@ async function outputPath(
   return join(out, name);
 }
 
-async function renderSheet(input: string, out: string | undefined, seed: number, detail: number): Promise<Result> {
+async function renderSheet(
+  input: string,
+  out: string | undefined,
+  seed: number,
+  detail: number,
+  texture: number,
+): Promise<Result> {
   const started = Date.now();
   const src = await load(input, SHEET_CELL_WIDTH);
   const cells: { buffer: Buffer; label: string }[] = [];
@@ -86,7 +94,7 @@ async function renderSheet(input: string, out: string | undefined, seed: number,
 
   for (const brush of SHEET_BRUSHES) {
     for (const style of Object.keys(STYLES) as StyleName[]) {
-      const result = await paint(src, { style, brush, detail, seed });
+      const result = await paint(src, { style, brush, detail, texture, seed });
       strokes += result.strokes;
       const buffer = await sharp(toBytes(result.canvas), {
         raw: { width: result.width, height: result.height, channels: 3 },
@@ -144,13 +152,19 @@ async function renderSheet(input: string, out: string | undefined, seed: number,
 async function renderOne(
   input: string,
   style: StyleName,
-  opts: { brush: number; detail: number; seed: number; preview: boolean; jpeg: boolean },
+  opts: { brush: number; detail: number; texture: number; seed: number; preview: boolean; jpeg: boolean },
   out: string | undefined,
   manyInputs: boolean,
 ): Promise<Result> {
   const started = Date.now();
   const src = await load(input, opts.preview ? PREVIEW_WIDTH : undefined);
-  const result = await paint(src, { style, brush: opts.brush, detail: opts.detail, seed: opts.seed });
+  const result = await paint(src, {
+    style,
+    brush: opts.brush,
+    detail: opts.detail,
+    texture: opts.texture,
+    seed: opts.seed,
+  });
   const icc = await extractIcc(input);
   const suffix = opts.preview ? `${style}.preview` : style;
   const path = await outputPath(input, suffix, opts.jpeg ? ".jpg" : ".png", out, manyInputs);
@@ -174,6 +188,7 @@ async function main(): Promise<void> {
       style: { type: "string", default: "oil" },
       brush: { type: "string", default: "1" },
       detail: { type: "string", default: "1" },
+      texture: { type: "string", default: "1" },
       seed: { type: "string", default: "1" },
       preview: { type: "boolean", default: false },
       sheet: { type: "boolean", default: false },
@@ -205,20 +220,22 @@ async function main(): Promise<void> {
 
   const brush = Number(values.brush);
   const detail = Number(values.detail);
+  const texture = Number(values.texture);
   const seed = Number(values.seed);
   if (!(brush > 0)) die("--brush must be a positive number");
   if (!(detail > 0)) die("--detail must be a positive number");
+  if (!(texture >= 0)) die("--texture must be zero or more");
   if (!Number.isFinite(seed)) die("--seed must be a number");
 
   const results: Result[] = [];
   for (const input of inputs) {
     if (!(await Bun.file(input).exists())) die(`no such file: ${input}`);
     const result = values.sheet
-      ? await renderSheet(input, values.out, seed, detail)
+      ? await renderSheet(input, values.out, seed, detail, texture)
       : await renderOne(
           input,
           values.style,
-          { brush, detail, seed, preview: values.preview, jpeg: values.jpeg },
+          { brush, detail, texture, seed, preview: values.preview, jpeg: values.jpeg },
           values.out,
           inputs.length > 1,
         );

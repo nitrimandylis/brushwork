@@ -43,7 +43,7 @@ function coverageFraction(coverage: Uint8Array): number {
 }
 
 const src = fixture();
-const defaults = { brush: 1, detail: 1, seed: 1 } as const;
+const defaults = { brush: 1, detail: 1, texture: 1, seed: 1 } as const;
 
 test("the output is the same size as the input", async () => {
   const result = await paint(src, { style: "oil", ...defaults });
@@ -71,9 +71,9 @@ test("the painting is still of the same picture", async () => {
 });
 
 test("a seed reproduces a painting exactly, and a different seed does not", async () => {
-  const a = await paint(src, { style: "oil", brush: 1, detail: 1, seed: 7 });
-  const b = await paint(src, { style: "oil", brush: 1, detail: 1, seed: 7 });
-  const c = await paint(src, { style: "oil", brush: 1, detail: 1, seed: 8 });
+  const a = await paint(src, { style: "oil", ...defaults, seed: 7 });
+  const b = await paint(src, { style: "oil", ...defaults, seed: 7 });
+  const c = await paint(src, { style: "oil", ...defaults, seed: 8 });
   expect(a.canvas).toEqual(b.canvas);
   expect(a.canvas).not.toEqual(c.canvas);
 });
@@ -86,16 +86,18 @@ function meanDeviation(canvas: Float32Array, source: Uint8Array): number {
 }
 
 test("a bigger brush paints a blockier picture", async () => {
-  const fine = await paint(src, { style: "oil", brush: 0.5, detail: 1, seed: 1 });
-  const broad = await paint(src, { style: "oil", brush: 2, detail: 1, seed: 1 });
+  const fine = await paint(src, { style: "oil", ...defaults, brush: 0.5 });
+  const broad = await paint(src, { style: "oil", ...defaults, brush: 2 });
   expect(meanDeviation(broad.canvas, src.data)).toBeGreaterThan(
     meanDeviation(fine.canvas, src.data),
   );
 });
 
 test("more detail reaches a finer brush, and keeps more of the picture", async () => {
-  const plain = await paint(src, { style: "oil", brush: 1, detail: 1, seed: 1 });
-  const detailed = await paint(src, { style: "oil", brush: 1, detail: 4, seed: 1 });
+  // Texture off: this is about how far the brush ladder reaches, and substrate
+  // grain deviates from the source far more than the finest brush recovers.
+  const plain = await paint(src, { style: "oil", ...defaults, texture: 0 });
+  const detailed = await paint(src, { style: "oil", ...defaults, texture: 0, detail: 4 });
   expect(detailed.strokes).toBeGreaterThan(plain.strokes);
   expect(meanDeviation(detailed.canvas, src.data)).toBeLessThan(
     meanDeviation(plain.canvas, src.data),
