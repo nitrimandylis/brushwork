@@ -1,4 +1,6 @@
 node_modules/
+dist/
+sheets/
 *.oil.png
 *.water.png
 *.ink.png

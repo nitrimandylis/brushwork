@@ -4,10 +4,10 @@
   "description": "Turn a photograph into a painting made of brush strokes",
   "type": "module",
   "bin": {
-    "brushwork": "src/cli.ts"
+    "brushwork": "dist/brushwork.js"
   },
   "files": [
-    "src",
+    "dist",
     "README.md",
     "LICENSE"
   ],
@@ -21,9 +21,11 @@
   ],
   "license": "MIT",
   "engines": {
-    "bun": ">=1.1.0"
+    "node": ">=18.17.0"
   },
   "scripts": {
+    "build": "bun build src/cli.ts --target=node --outfile dist/brushwork.js --external sharp",
+    "prepack": "bun run build",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

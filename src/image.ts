@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -36,7 +37,7 @@ export async function extractIcc(path: string): Promise<string | null> {
   const meta = await sharp(path).metadata();
   if (!meta.icc) return null;
   const iccPath = join(tmpdir(), `brushwork-${process.pid}.icc`);
-  await Bun.write(iccPath, meta.icc);
+  await writeFile(iccPath, meta.icc);
   return iccPath;
 }
 

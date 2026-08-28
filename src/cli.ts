@@ -1,12 +1,13 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, access } from "node:fs/promises";
 import sharp, { type OverlayOptions } from "sharp";
 import { load, save, extractIcc, toBytes } from "./image";
 import { paint } from "./paint";
 import { STYLES, isStyleName, type StyleName } from "./styles";
 
+const VERSION = "0.1.0";
 const PREVIEW_WIDTH = 1200;
 const SHEET_CELL_WIDTH = 900;
 const SHEET_BRUSHES = [1, 2];
@@ -51,14 +52,21 @@ function die(message: string): never {
   process.exit(1);
 }
 
+// Only `*` is supported, which is all a shell leaves for us to handle anyway.
+function globToRegExp(pattern: string): RegExp {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  return new RegExp(`^${escaped}$`);
+}
+
 async function expandInputs(patterns: string[]): Promise<string[]> {
   const paths: string[] = [];
   for (const pattern of patterns) {
     // The shell usually expands globs first; this is for quoted ones.
     if (pattern.includes("*")) {
-      const glob = new Bun.Glob(basename(pattern));
-      for await (const match of glob.scan({ cwd: dirname(pattern) || "." })) {
-        paths.push(join(dirname(pattern) || ".", match));
+      const dir = dirname(pattern) || ".";
+      const matcher = globToRegExp(basename(pattern));
+      for (const entry of await readdir(dir)) {
+        if (matcher.test(entry)) paths.push(join(dir, entry));
       }
     } else {
       paths.push(pattern);
@@ -264,32 +272,44 @@ async function renderOne(
   };
 }
 
+// parseArgs is strict, so an unrecognised flag throws rather than being silently
+// ignored. That is the behaviour we want; the stack trace it comes with is not.
+function parse() {
+  try {
+    return parseArgs({
+      args: process.argv.slice(2),
+      allowPositionals: true,
+      options: OPTIONS,
+    });
+  } catch (error) {
+    die(error instanceof Error ? error.message.split(".")[0]! : "bad arguments");
+  }
+}
+
+const OPTIONS = {
+  style: { type: "string", default: "oil" },
+  brush: { type: "string", default: "1" },
+  detail: { type: "string", default: "1" },
+  texture: { type: "string", default: "1" },
+  seed: { type: "string", default: "1" },
+  preview: { type: "boolean", default: false },
+  sheet: { type: "boolean", default: false },
+  jpeg: { type: "boolean", default: false },
+  out: { type: "string", short: "o" },
+  json: { type: "boolean", default: false },
+  help: { type: "boolean", short: "h", default: false },
+  version: { type: "boolean", short: "V", default: false },
+} as const;
+
 async function main(): Promise<void> {
-  const { values, positionals } = parseArgs({
-    args: Bun.argv.slice(2),
-    allowPositionals: true,
-    options: {
-      style: { type: "string", default: "oil" },
-      brush: { type: "string", default: "1" },
-      detail: { type: "string", default: "1" },
-      texture: { type: "string", default: "1" },
-      seed: { type: "string", default: "1" },
-      preview: { type: "boolean", default: false },
-      sheet: { type: "boolean", default: false },
-      jpeg: { type: "boolean", default: false },
-      out: { type: "string", short: "o" },
-      json: { type: "boolean", default: false },
-      help: { type: "boolean", short: "h", default: false },
-      version: { type: "boolean", short: "V", default: false },
-    },
-  });
+  const { values, positionals } = parse();
 
   if (values.help) {
     console.log(HELP);
     return;
   }
   if (values.version) {
-    console.log((await import("../package.json")).version);
+    console.log(VERSION);
     return;
   }
 
@@ -313,16 +333,29 @@ async function main(): Promise<void> {
 
   const results: Result[] = [];
   for (const input of inputs) {
-    if (!(await Bun.file(input).exists())) die(`no such file: ${input}`);
-    const result = values.sheet
-      ? await renderSheet(input, values.out, seed, detail, texture)
-      : await renderOne(
-          input,
-          values.style,
-          { brush, detail, texture, seed, preview: values.preview, jpeg: values.jpeg },
-          values.out,
-          inputs.length > 1,
-        );
+    try {
+      await access(input);
+    } catch {
+      die(`no such file: ${input}`);
+    }
+    let result: Result;
+    try {
+      result = values.sheet
+        ? await renderSheet(input, values.out, seed, detail, texture)
+        : await renderOne(
+            input,
+            values.style,
+            { brush, detail, texture, seed, preview: values.preview, jpeg: values.jpeg },
+            values.out,
+            inputs.length > 1,
+          );
+    } catch (error) {
+      // Anything sharp refuses to decode, plus unwritable output paths. A
+      // consumer branches on the exit code, so this must not surface as a trace
+      // on stderr and a zero exit.
+      const reason = error instanceof Error ? error.message.split("\n")[0] : String(error);
+      die(`could not paint ${input}: ${reason}`);
+    }
     results.push(result);
     if (!values.json) {
       console.log(
