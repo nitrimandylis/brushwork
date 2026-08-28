@@ -7,6 +7,7 @@ export type Style = {
   jitter: number; // per-bristle colour wobble, 0-255 scale
   mono: boolean; // ink: throw the colour away, tone comes from opacity
   widthFactor: number; // stroke width as a fraction of the brush diameter
+  lengthFactor: number; // how far a stroke may travel, as a fraction of the maximum
   paper: [number, number, number] | null; // starting canvas; null = blurred underpainting
   edgeDarken: number; // watercolour pigment pooling at a wash boundary, 0 = off
 };
@@ -19,6 +20,7 @@ export const STYLES: Record<string, Style> = {
     jitter: 6,
     mono: false,
     widthFactor: 1,
+    lengthFactor: 1,
     paper: null,
     edgeDarken: 0,
   },
@@ -29,16 +31,18 @@ export const STYLES: Record<string, Style> = {
     jitter: 3,
     mono: false,
     widthFactor: 1,
+    lengthFactor: 1,
     paper: [255, 255, 255],
     edgeDarken: 0.35,
   },
   ink: {
     bristles: 1,
-    alpha: 0.5,
+    alpha: 0.35,
     blend: "multiply",
     jitter: 0,
     mono: true,
     widthFactor: 0.06, // a nib, not a brush
+    lengthFactor: 0.3, // hatching is short marks, not long wandering lines
     paper: [255, 255, 255],
     edgeDarken: 0,
   },

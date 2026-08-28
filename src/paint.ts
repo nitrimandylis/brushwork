@@ -83,6 +83,7 @@ function strokePath(
   ref: Uint8Array,
   seed: number,
   radius: number,
+  maxSteps: number,
   w: number,
   h: number,
   rng: () => number,
@@ -100,13 +101,15 @@ function strokePath(
   let lastDx = 0;
   let lastDy = 0;
 
-  for (let step = 1; step <= MAX_STROKE_STEPS; step++) {
+  const minSteps = Math.min(MIN_STROKE_STEPS, maxSteps - 1);
+
+  for (let step = 1; step <= maxSteps; step++) {
     const ix = Math.round(x);
     const iy = Math.round(y);
     if (ix < 0 || iy < 0 || ix >= w || iy >= h) break;
     const p = iy * w + ix;
 
-    if (step > MIN_STROKE_STEPS && canvasError(canvas, ref, p) < colourError(ref, p, cr, cg, cb)) {
+    if (step > minSteps && canvasError(canvas, ref, p) < colourError(ref, p, cr, cg, cb)) {
       break;
     }
 
@@ -347,7 +350,8 @@ function paintLayer(
   }
 
   for (const seed of seeds) {
-    const points = strokePath(canvas, ref.data, seed, radius, w, h, rng);
+    const maxSteps = Math.max(1, Math.round(MAX_STROKE_STEPS * style.lengthFactor));
+    const points = strokePath(canvas, ref.data, seed, radius, maxSteps, w, h, rng);
     const i = seed * 3;
     renderStroke(
       canvas,
