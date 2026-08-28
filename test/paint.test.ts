@@ -103,3 +103,13 @@ test("more detail reaches a finer brush, and keeps more of the picture", async (
     meanDeviation(plain.canvas, src.data),
   );
 });
+
+test("the version the CLI prints matches the one that gets published", async () => {
+  // Two places hold it: package.json, and a constant in cli.ts because a
+  // bundle has no package.json to read at runtime. Bumping one and not the
+  // other ships a tool that lies about which version it is.
+  const pkg = await Bun.file(new URL("../package.json", import.meta.url)).json();
+  const cli = await Bun.file(new URL("../src/cli.ts", import.meta.url)).text();
+  const declared = cli.match(/const VERSION = "([^"]+)"/)?.[1];
+  expect(declared).toBe(pkg.version);
+});
