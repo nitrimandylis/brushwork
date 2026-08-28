@@ -119,6 +119,14 @@ washed out.
   than converging on the colour. Watercolour uses low-alpha `over` plus edge
   darkening instead.
 
+**Every sheet cell carries a 3x detail inset.** A sheet is far wider than any
+window, so it is looked at scaled down, and scaling is exactly what destroys
+canvas weave and stroke relief: the first textured sheets looked untextured. The
+inset is magnified by the same factor the sheet is typically shrunk by, so it
+lands back at roughly one to one. Its crop is chosen from a calm part of the
+picture rather than the busiest, because the full cell already shows the
+brushwork and what an inset is for is the surface.
+
 ## Known limitation
 
 A faint halo of pale slabs can appear in flat areas next to a high-contrast

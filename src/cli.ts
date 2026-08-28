@@ -10,6 +10,7 @@ import { STYLES, isStyleName, type StyleName } from "./styles";
 const PREVIEW_WIDTH = 1200;
 const SHEET_CELL_WIDTH = 900;
 const SHEET_BRUSHES = [1, 2];
+const SHEET_ZOOM = 3; // magnification of the detail inset
 
 const HELP = `brushwork - turn a photograph into a painting made of brush strokes
 
@@ -25,7 +26,8 @@ options:
                                                  (default: 1)
   --seed <n>       same seed, same painting     (default: 1)
   --preview        render small and fast, for dialling flags in
-  --sheet          one grid of every style at two brush sizes
+  --sheet          one grid of every style at two brush sizes, each cell
+                   carrying a 3x detail inset so texture survives the scaling
   --jpeg           write jpeg instead of png
   -o, --out <path> output file, or a directory for several inputs
   --json           print results as json
@@ -80,6 +82,54 @@ async function outputPath(
   return join(out, name);
 }
 
+// Where to take the magnified detail from. Texture shows itself in calm areas:
+// a crop of the busiest part of the picture is all stroke and no surface, and a
+// crop of solid black shows nothing at all. So this picks the flattest candidate
+// that is not in shadow or blown out.
+function pickDetailCrop(
+  src: { data: Uint8Array; width: number; height: number },
+  cropWidth: number,
+  cropHeight: number,
+): { left: number; top: number } {
+  const candidates: { left: number; top: number; spread: number; mean: number }[] = [];
+
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      const left = Math.round(((src.width - cropWidth) * col) / 2);
+      const top = Math.round(((src.height - cropHeight) * row) / 2);
+
+      let sum = 0;
+      let sumSquares = 0;
+      let count = 0;
+      for (let y = top; y < top + cropHeight; y += 2) {
+        for (let x = left; x < left + cropWidth; x += 2) {
+          const i = (y * src.width + x) * 3;
+          const lum = 0.299 * src.data[i] + 0.587 * src.data[i + 1] + 0.114 * src.data[i + 2];
+          sum += lum;
+          sumSquares += lum * lum;
+          count++;
+        }
+      }
+      const mean = sum / count;
+      candidates.push({
+        left,
+        top,
+        mean,
+        spread: Math.sqrt(Math.max(0, sumSquares / count - mean * mean)),
+      });
+    }
+  }
+
+  // Drop anything in deep shadow or blown out, where there is nothing to see.
+  const usable = candidates.filter((c) => c.mean > 30 && c.mean < 225);
+  const pool = usable.length > 0 ? usable : candidates;
+  pool.sort((a, b) => a.spread - b.spread);
+  // A quarter of the way up the range: calm enough that the surface shows,
+  // busy enough that there is still some brushwork in frame.
+  const chosen = pool[Math.floor(pool.length * 0.25)];
+  return { left: chosen.left, top: chosen.top };
+}
+
 async function renderSheet(
   input: string,
   out: string | undefined,
@@ -89,8 +139,19 @@ async function renderSheet(
 ): Promise<Result> {
   const started = Date.now();
   const src = await load(input, SHEET_CELL_WIDTH);
-  const cells: { buffer: Buffer; label: string }[] = [];
+  const cells: { buffer: Buffer; detail: Buffer; label: string }[] = [];
   let strokes = 0;
+
+  // A sheet is far wider than any window, so it is looked at scaled down, and
+  // scaling is exactly what destroys canvas weave and stroke relief. Each cell
+  // therefore carries a magnified crop of its own centre: shrink the sheet to
+  // fit and that inset lands back at roughly one to one.
+  const insetWidth = Math.round(src.width / 3);
+  const insetHeight = Math.round((insetWidth * src.height) / src.width);
+  const cropWidth = Math.round(insetWidth / SHEET_ZOOM);
+  const cropHeight = Math.round(insetHeight / SHEET_ZOOM);
+  // One crop rectangle for every cell, so the six insets can be compared.
+  const crop = pickDetailCrop(src, cropWidth, cropHeight);
 
   for (const brush of SHEET_BRUSHES) {
     for (const style of Object.keys(STYLES) as StyleName[]) {
@@ -101,7 +162,12 @@ async function renderSheet(
       })
         .png()
         .toBuffer();
-      cells.push({ buffer, label: `${style}  --brush ${brush}` });
+      const inset = await sharp(buffer)
+        .extract({ left: crop.left, top: crop.top, width: cropWidth, height: cropHeight })
+        .resize(insetWidth, insetHeight, { kernel: "nearest" })
+        .png()
+        .toBuffer();
+      cells.push({ buffer, detail: inset, label: `${style}  --brush ${brush}` });
     }
   }
 
@@ -122,7 +188,13 @@ async function renderSheet(
     const x = pad + col * (cellW + pad);
     const y = pad + row * (cellH + labelH + pad);
     overlays.push({ input: cell.buffer, left: x, top: y });
-    labels += `<text x="${x}" y="${y + cellH + 23}" font-family="monospace" font-size="18" fill="#e6e6e6">${cell.label}</text>`;
+    const insetX = x + cellW - insetWidth - 12;
+    const insetY = y + cellH - insetHeight - 12;
+    overlays.push({ input: cell.detail, left: insetX, top: insetY });
+    labels +=
+      `<text x="${x}" y="${y + cellH + 23}" font-family="monospace" font-size="18" fill="#e6e6e6">${cell.label}</text>` +
+      `<rect x="${insetX}" y="${insetY}" width="${insetWidth}" height="${insetHeight}" fill="none" stroke="#141414" stroke-width="3"/>` +
+      `<text x="${insetX + 8}" y="${insetY + 22}" font-family="monospace" font-size="15" fill="#141414">${SHEET_ZOOM}x</text>`;
   });
   overlays.push({
     input: Buffer.from(`<svg width="${sheetW}" height="${sheetH}">${labels}</svg>`),
