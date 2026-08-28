@@ -171,6 +171,25 @@ into `dist/brushwork.js`, produced by `prepack`, with sharp left external.
 Nothing in `src/` may use a Bun-only API, or the installed tool breaks for anyone
 running it under node. `engines` says node >=18.17.
 
+## Releasing
+
+`.github/workflows/publish.yml` publishes on a GitHub release, authenticated by
+OIDC trusted publishing rather than a token. No secret lives in the repo and a
+release needs neither a local clone nor an OTP, which is what makes the
+delete-the-clone-after-publishing habit survivable.
+
+**The first version cannot go out that way.** Unlike PyPI, npm has no pending
+publisher: its settings page needs the package to exist before a trusted
+publisher can be attached to it (npm/cli#8544). So the sequence is: publish
+`0.1.0` by hand with an OTP, add the trusted publisher on npmjs.com pointing at
+this repo and `publish.yml`, and every release after that is a git tag.
+
+The `environment: npm` line is part of the identity npm checks, so the same name
+has to be set on npm's side. `id-token: write` is what produces the OIDC token at
+all. Node is pinned to 22.14 because trusted publishing requires it, and npm is
+upgraded in a step because the one bundled with Node 22 is too old for it. None
+of that constrains the published package, whose own floor is node 18.17.
+
 ## Performance
 
 3840x2160 oil render: 6.8s on the M3 Pro, texture included. `--preview` renders
