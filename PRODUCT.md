@@ -78,7 +78,9 @@ each is worth keeping in mind before changing that code:
 - *Substrate.* A procedural linen weave under oil, cold-press paper under water
   and ink. Generated as a wrapped 1024px tile rather than per pixel, because
   several octaves of noise across 28 million pixels would cost more than the
-  painting does. Masked by paint thickness, so it shows through thin paint and
+  painting does. The weave is mostly fibre noise with a faint warp and weft
+  through it: two sines alone peak at every crossing and read as a regular dot
+  screen rather than cloth. Masked by paint thickness, so it shows through thin paint and
   is buried under thick.
 - *Dry brush.* A bristle carries a finite load. As it runs out it stops bridging
   the pits in the substrate and catches only the raised fibre, so marks break up

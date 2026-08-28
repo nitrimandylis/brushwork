@@ -36,9 +36,9 @@ function valueNoise(x: number, y: number, seed: number): number {
 // pixels and several octaves of noise each would cost more than the painting.
 export function makeGrain(kind: "canvas" | "paper", featurePx: number, seed: number): Float32Array {
   const grain = new Float32Array(GRAIN_SIZE * GRAIN_SIZE);
-  // Never finer than three pixels: below that the weave aliases into a dot
+  // Never finer than four pixels: below that the weave aliases into a dot
   // screen instead of fabric, and a preview stops predicting the full render.
-  const period = Math.max(3, featurePx);
+  const period = Math.max(4, featurePx);
   const freq = (Math.PI * 2) / period;
 
   for (let y = 0; y < GRAIN_SIZE; y++) {
@@ -51,7 +51,11 @@ export function makeGrain(kind: "canvas" | "paper", featurePx: number, seed: num
         const weftWobble = valueNoise(x / (period * 8) + 31, y / (period * 8) + 17, seed) - 0.5;
         const warp = Math.sin((x + warpWobble * period) * freq);
         const weft = Math.sin((y + weftWobble * period) * freq);
-        value = 0.5 + 0.22 * warp + 0.22 * weft;
+        // Two sines on their own peak at every crossing and read as a regular
+        // dot lattice, not cloth. Most of the variation is fibre noise; the
+        // threads only give it a direction.
+        const fibre = valueNoise(x / (period * 0.5), y / (period * 0.5), seed + 5) - 0.5;
+        value = 0.5 + 0.11 * warp + 0.11 * weft + 0.34 * fibre;
       } else {
         // Cold-press paper: no direction to it, just irregular fibre at two
         // scales.
