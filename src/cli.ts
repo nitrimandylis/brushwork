@@ -26,8 +26,9 @@ options:
                                                  (default: 1)
   --seed <n>       same seed, same painting     (default: 1)
   --preview        render small and fast, for dialling flags in
-  --sheet          one grid of every style at two brush sizes, each cell
-                   carrying a 3x detail inset so texture survives the scaling
+  --sheet          one grid of every style at two brush sizes, textured and
+                   bare, each cell carrying a 3x detail inset so the texture
+                   survives being looked at scaled down
   --jpeg           write jpeg instead of png
   -o, --out <path> output file, or a directory for several inputs
   --json           print results as json
@@ -153,9 +154,19 @@ async function renderSheet(
   // One crop rectangle for every cell, so the six insets can be compared.
   const crop = pickDetailCrop(src, cropWidth, cropHeight);
 
+  // Each brush size gets a textured row and a bare one, so the texture pass can
+  // be judged against the paint underneath it rather than from memory. Asking
+  // for no texture in the first place collapses that back to one row.
+  const rowsSpec: { brush: number; texture: number }[] = [];
   for (const brush of SHEET_BRUSHES) {
+    rowsSpec.push({ brush, texture });
+    if (texture > 0) rowsSpec.push({ brush, texture: 0 });
+  }
+
+  for (const row of rowsSpec) {
+    const brush = row.brush;
     for (const style of Object.keys(STYLES) as StyleName[]) {
-      const result = await paint(src, { style, brush, detail, texture, seed });
+      const result = await paint(src, { style, brush, detail, texture: row.texture, seed });
       strokes += result.strokes;
       const buffer = await sharp(toBytes(result.canvas), {
         raw: { width: result.width, height: result.height, channels: 3 },
@@ -167,12 +178,13 @@ async function renderSheet(
         .resize(insetWidth, insetHeight, { kernel: "nearest" })
         .png()
         .toBuffer();
-      cells.push({ buffer, detail: inset, label: `${style}  --brush ${brush}` });
+      const texturePart = row.texture > 0 ? "" : "  --texture 0";
+      cells.push({ buffer, detail: inset, label: `${style}  --brush ${brush}${texturePart}` });
     }
   }
 
   const cols = Object.keys(STYLES).length;
-  const rows = SHEET_BRUSHES.length;
+  const rows = rowsSpec.length;
   const cellW = src.width;
   const cellH = src.height;
   const pad = 12;

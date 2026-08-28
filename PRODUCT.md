@@ -119,6 +119,11 @@ washed out.
   than converging on the colour. Watercolour uses low-alpha `over` plus edge
   darkening instead.
 
+**A sheet is every style at two brush sizes, textured and bare**: twelve cells,
+each textured row sitting directly above its bare counterpart so the texture
+pass is judged against the paint underneath rather than from memory. Passing
+`--texture 0` collapses it back to six.
+
 **Every sheet cell carries a 3x detail inset.** A sheet is far wider than any
 window, so it is looked at scaled down, and scaling is exactly what destroys
 canvas weave and stroke relief: the first textured sheets looked untextured. The
