@@ -19,7 +19,8 @@ usage:
 options:
   --style <name>   oil, water or ink            (default: oil)
   --brush <n>      stroke size multiplier       (default: 1)
-  --detail <n>     higher paints more strokes   (default: 1)
+  --detail <n>     how fine the smallest brush goes, higher keeps more
+                   of the original detail        (default: 1)
   --seed <n>       same seed, same painting     (default: 1)
   --preview        render small and fast, for dialling flags in
   --sheet          one grid of every style at two brush sizes

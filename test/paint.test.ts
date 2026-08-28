@@ -78,14 +78,26 @@ test("a seed reproduces a painting exactly, and a different seed does not", asyn
   expect(a.canvas).not.toEqual(c.canvas);
 });
 
-test("a bigger brush paints fewer, larger strokes", async () => {
+// How far the painting departs from the photograph it was made from.
+function meanDeviation(canvas: Float32Array, source: Uint8Array): number {
+  let total = 0;
+  for (let i = 0; i < canvas.length; i++) total += Math.abs(canvas[i] - source[i]);
+  return total / canvas.length;
+}
+
+test("a bigger brush paints a blockier picture", async () => {
   const fine = await paint(src, { style: "oil", brush: 0.5, detail: 1, seed: 1 });
   const broad = await paint(src, { style: "oil", brush: 2, detail: 1, seed: 1 });
-  expect(fine.strokes).toBeGreaterThan(broad.strokes);
+  expect(meanDeviation(broad.canvas, src.data)).toBeGreaterThan(
+    meanDeviation(fine.canvas, src.data),
+  );
 });
 
-test("more detail paints more strokes", async () => {
+test("more detail reaches a finer brush, and keeps more of the picture", async () => {
   const plain = await paint(src, { style: "oil", brush: 1, detail: 1, seed: 1 });
-  const detailed = await paint(src, { style: "oil", brush: 1, detail: 3, seed: 1 });
+  const detailed = await paint(src, { style: "oil", brush: 1, detail: 4, seed: 1 });
   expect(detailed.strokes).toBeGreaterThan(plain.strokes);
+  expect(meanDeviation(detailed.canvas, src.data)).toBeLessThan(
+    meanDeviation(plain.canvas, src.data),
+  );
 });

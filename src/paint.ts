@@ -4,7 +4,7 @@ import { STYLES, type Style, type StyleName } from "./styles";
 export type PaintOptions = {
   style: StyleName;
   brush: number; // multiplies the whole radius ladder
-  detail: number; // higher = pickier = more strokes
+  detail: number; // how far below the widest brush the ladder reaches
   seed: number;
 };
 
@@ -20,7 +20,14 @@ const MIN_STROKE_STEPS = 4;
 const MAX_STROKE_STEPS = 10;
 const BLUR_FACTOR = 0.5; // the reference image a layer paints towards
 const CURVATURE_FILTER = 0.5; // 1 = a stroke turns freely, 0 = it never turns
-const BASE_THRESHOLD = 25; // mean colour error a grid cell needs before it earns a stroke
+const LADDER_RANGE = 8; // widest brush over finest, before --detail scales it
+const BASE_THRESHOLD = 25;
+// Below this the reference really is flat and there is no direction to read.
+const FLAT_GRADIENT = 0.25;
+// Every stroke leans a few degrees off the direction it was handed. Perfectly
+// parallel strokes on a regular grid read as scan lines, most visibly in a
+// smooth sky, which no hand-made mark ever does.
+const ANGLE_JITTER = 0.18; // radians, about ten degrees // mean colour error a grid cell needs before it earns a stroke
 
 // Small deterministic RNG so --seed reproduces a render exactly.
 function mulberry32(seed: number): () => number {
@@ -57,11 +64,26 @@ function colourError(ref: Uint8Array, p: number, r: number, g: number, b: number
 
 // Sobel gradient of the reference luminance. Strokes run across this, which is
 // why paint appears to follow the form of what it is painting.
-function gradient(ref: Uint8Array, x: number, y: number, w: number, h: number): [number, number] {
-  const x0 = x > 0 ? x - 1 : 0;
-  const x1 = x < w - 1 ? x + 1 : w - 1;
-  const y0 = y > 0 ? y - 1 : 0;
-  const y1 = y < h - 1 ? y + 1 : h - 1;
+//
+// The taps are spaced to the brush, not to the pixel. A wide brush painting a
+// smooth sky sees almost nothing one pixel away, so a one-pixel Sobel hands
+// back a direction that is mostly rounding noise and the strokes fan out into a
+// starburst. Reading the same gradient across a brush-width tells it which way
+// the sky actually runs.
+function gradient(
+  ref: Uint8Array,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  step: number,
+): [number, number] {
+  const clampX = (v: number) => (v < 0 ? 0 : v > w - 1 ? w - 1 : v);
+  const clampY = (v: number) => (v < 0 ? 0 : v > h - 1 ? h - 1 : v);
+  const x0 = clampX(x - step);
+  const x1 = clampX(x + step);
+  const y0 = clampY(y - step);
+  const y1 = clampY(y + step);
   const tl = luminance(ref, y0 * w + x0);
   const tc = luminance(ref, y0 * w + x);
   const tr = luminance(ref, y0 * w + x1);
@@ -100,8 +122,12 @@ function strokePath(
   let y = sy;
   let lastDx = 0;
   let lastDy = 0;
+  const lean = (rng() - 0.5) * 2 * ANGLE_JITTER;
+  const leanCos = Math.cos(lean);
+  const leanSin = Math.sin(lean);
 
   const minSteps = Math.min(MIN_STROKE_STEPS, maxSteps - 1);
+  const gradientStep = Math.max(1, Math.round(radius / 2));
 
   for (let step = 1; step <= maxSteps; step++) {
     const ix = Math.round(x);
@@ -113,12 +139,12 @@ function strokePath(
       break;
     }
 
-    const [gx, gy] = gradient(ref, ix, iy, w, h);
+    const [gx, gy] = gradient(ref, ix, iy, w, h, gradientStep);
     const mag = Math.sqrt(gx * gx + gy * gy);
 
     let dx: number;
     let dy: number;
-    if (mag < 1e-6) {
+    if (mag < FLAT_GRADIENT) {
       // Flat region: no form to follow, so keep going straight, or pick a
       // direction if this is the first step. Without this, flat sky is dots.
       if (lastDx === 0 && lastDy === 0) {
@@ -143,10 +169,12 @@ function strokePath(
       dy /= norm;
     }
 
-    x += radius * dx;
-    y += radius * dy;
-    lastDx = dx;
-    lastDy = dy;
+    const leanedDx = dx * leanCos - dy * leanSin;
+    const leanedDy = dx * leanSin + dy * leanCos;
+    x += radius * leanedDx;
+    y += radius * leanedDy;
+    lastDx = leanedDx;
+    lastDy = leanedDy;
     points.push(x, y);
   }
 
@@ -279,9 +307,13 @@ function renderStroke(
 
   for (let i = 0; i < count; i++) {
     const offset = count === 1 ? 0 : (i / (count - 1) - 0.5) * span;
-    const jr = r + (rng() - 0.5) * 2 * style.jitter;
-    const jg = g + (rng() - 0.5) * 2 * style.jitter;
-    const jb = b + (rng() - 0.5) * 2 * style.jitter;
+    // One shared shift across all three channels, so a bristle reads as
+    // carrying more or less paint. Jittering each channel on its own instead
+    // shifts the hue, which shows up as rainbow streaking in a smooth sky.
+    const shade = (rng() - 0.5) * 2 * style.jitter;
+    const jr = r + shade + (rng() - 0.5) * style.jitter * 0.3;
+    const jg = g + shade + (rng() - 0.5) * style.jitter * 0.3;
+    const jb = b + shade + (rng() - 0.5) * style.jitter * 0.3;
     const alpha = style.alpha * toneScale * (0.6 + 0.4 * rng());
     drawBristle(canvas, coverage, points, offset, bristleRadius, jr, jg, jb, alpha, multiply, w, h);
   }
@@ -396,9 +428,15 @@ export async function paint(src: Image, opts: PaintOptions): Promise<PaintResult
   const style = STYLES[opts.style];
 
   // Brush size is relative to the image, so a 1080p and a 6K copy of the same
-  // photo come out looking like the same painting at two print sizes.
-  const base = Math.max(2, (src.width / 120) * opts.brush);
-  const radii = [4 * base, 2 * base, base];
+  // photo come out looking like the same painting at two print sizes. The ladder
+  // halves down from the widest brush; how far down it goes is what decides how
+  // much of the original detail survives, so it runs until the brush is finer
+  // than the detail worth keeping.
+  const coarsest = Math.max(4, (src.width / 30) * opts.brush);
+  const finest = Math.max(1.5, coarsest / (LADDER_RANGE * opts.detail));
+  const radii: number[] = [];
+  for (let radius = coarsest; radius > finest; radius /= 2) radii.push(radius);
+  radii.push(finest);
 
   const margin = Math.ceil(radii[0]);
   const padded = await padMirror(src, margin);
@@ -423,7 +461,7 @@ export async function paint(src: Image, opts: PaintOptions): Promise<PaintResult
   }
 
   const rng = mulberry32(opts.seed);
-  const threshold = BASE_THRESHOLD / opts.detail;
+  const threshold = BASE_THRESHOLD;
   let strokes = 0;
 
   for (const radius of radii) {

@@ -30,10 +30,20 @@ paths, offset sideways, each carrying slightly jittered colour and opacity. Flat
 polylines read as felt-tip marker; the streaking within a stroke is what makes it
 read as paint.
 
-**Brush size is relative to image width**, `width / 120` for the finest layer and
-4x/2x/1x above it. A 1080p and a 6K copy of the same photo therefore come out
-looking like the same painting at two print sizes, which matters when a wallpaper
-pool mixes resolutions. `--brush` multiplies the whole ladder.
+**Brush size is relative to image width.** The widest brush is `width / 30` and
+the ladder halves down from there, by default through four halvings to
+`width / 240`. A 1080p and a 6K copy of the same photo therefore come out looking
+like the same painting at two print sizes, which matters when a wallpaper pool
+mixes resolutions. `--brush` moves the whole ladder, so it sets the character;
+`--detail` extends the bottom of it, so it sets how much of the original picture
+survives.
+
+**How far down the ladder goes is the single thing that decides detail.** The
+first version stopped at `width / 120`, a 32px brush at 4K, and quietly erased
+everything smaller than that: a fire tower on a ridge, the legs of a horse. Three
+extra halvings brought them back without touching the wide end, so the blocking-in
+still reads as paint. Past about `--detail 2` the result stops looking painted and
+starts looking like a slightly soft photograph.
 
 **One engine, three styles.** `oil`, `water` and `ink` are not separate
 renderers, they are configuration: bristle count, opacity, blend mode, colour
@@ -48,6 +58,20 @@ picture needs.
 can then be seeded outside the frame and paint across the real edge. Without it
 the outer band of every render is measurably thinner than the rest of the
 picture.
+
+**Three artefacts were fixed by making the marks behave like real ones**, and
+each is worth keeping in mind before changing that code:
+
+- *Bristle jitter is tonal, not chromatic.* Jittering each colour channel
+  independently shifts the hue, which paints rainbow streaks across a smooth sky.
+  One shared shift across all three channels reads as a bristle carrying more or
+  less paint, which is what actually varies.
+- *The gradient is sampled at brush width, not per pixel.* A wide brush in a
+  smooth sky sees nothing one pixel away, so a one-pixel Sobel returns rounding
+  noise and the strokes fan out into a starburst around any high-contrast
+  subject.
+- *Every stroke leans a few degrees off its heading.* Strokes seeded on a regular
+  grid and pointing the same way band into scan lines, most visibly in ink.
 
 **PNG out, with the source ICC profile attached.** Stroke edges are high
 frequency and JPEG rings on them; `--jpeg` is there when file size matters more.
@@ -82,6 +106,6 @@ Bun 1.3.10.
 
 ## Performance
 
-3840x2160 oil render: 5.0s, 3.4MB PNG, on the M3 Pro. `--preview` renders at
+3840x2160 oil render: 7.4s, on the M3 Pro. `--preview` renders at
 1200px wide in well under a second, which is what `--sheet` uses for its six
 cells.
