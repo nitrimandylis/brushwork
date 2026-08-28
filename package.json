@@ -1,0 +1,37 @@
+{
+  "name": "brushwork",
+  "version": "0.1.0",
+  "description": "Turn a photograph into a painting made of brush strokes",
+  "type": "module",
+  "bin": {
+    "brushwork": "src/cli.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "painterly",
+    "brush-strokes",
+    "wallpaper",
+    "image-processing",
+    "cli",
+    "non-photorealistic-rendering"
+  ],
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "sharp": "^0.35.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

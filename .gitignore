@@ -1,0 +1,6 @@
+node_modules/
+*.oil.png
+*.water.png
+*.ink.png
+*.sheet.png
+*.preview.png
