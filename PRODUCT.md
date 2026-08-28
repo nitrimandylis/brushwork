@@ -31,8 +31,8 @@ polylines read as felt-tip marker; the streaking within a stroke is what makes i
 read as paint.
 
 **Brush size is relative to image width.** The widest brush is `width / 30` and
-the ladder halves down from there, by default through four halvings to
-`width / 240`. A 1080p and a 6K copy of the same photo therefore come out looking
+the ladder halves down from there, by default to `width / 240`: four brush
+sizes, three halvings. `--detail 2` adds a fifth, `--detail 4` a sixth. A 1080p and a 6K copy of the same photo therefore come out looking
 like the same painting at two print sizes, which matters when a wallpaper pool
 mixes resolutions. `--brush` moves the whole ladder, so it sets the character;
 `--detail` extends the bottom of it, so it sets how much of the original picture
@@ -40,8 +40,8 @@ survives.
 
 **How far down the ladder goes is the single thing that decides detail.** The
 first version stopped at `width / 120`, a 32px brush at 4K, and quietly erased
-everything smaller than that: a fire tower on a ridge, the legs of a horse. Three
-extra halvings brought them back without touching the wide end, so the blocking-in
+everything smaller than that: a fire tower on a ridge, the legs of a horse. One
+more halving brought them back without touching the wide end, so the blocking-in
 still reads as paint. Past about `--detail 2` the result stops looking painted and
 starts looking like a slightly soft photograph.
 
@@ -152,14 +152,22 @@ so the test does not catch them.
 
 ## Distribution
 
-Ships on npm, run with `bunx brushwork` or installed with `bun install -g
-brushwork`. Not a compiled binary: sharp is a native NAPI addon and
-`bun build --compile` bundles it but cannot load it at runtime
-(`Could not load the "sharp" module using the darwin-arm64 runtime`). Verified on
-Bun 1.3.10.
+Ships on npm: `bun install -g brushwork`, or `npm install -g brushwork`. Not a
+compiled binary, because sharp is a native NAPI addon that `bun build --compile`
+bundles and then cannot load at runtime (`Could not load the "sharp" module using
+the darwin-arm64 runtime`). Verified on Bun 1.3.10.
+
+The published artifact is therefore a plain node bundle: `bun build --target=node`
+into `dist/brushwork.js`, produced by `prepack`, with sharp left external.
+Nothing in `src/` may use a Bun-only API, or the installed tool breaks for anyone
+running it under node. `engines` says node >=18.17.
 
 ## Performance
 
-3840x2160 oil render: 6.8s, on the M3 Pro, texture included. `--preview` renders at
-1200px wide in well under a second, which is what `--sheet` uses for its six
+3840x2160 oil render: 6.8s on the M3 Pro, texture included. `--preview` renders
+at 1200px wide in well under a second, which is what `--sheet` uses for its twelve
 cells.
+
+5120x2880 takes 52.8s, far worse than the pixel count alone accounts for. Not
+chased down; the suspect is memory pressure, since the padded canvas, the
+thickness field and the relief pass's own buffer are all allocated at full size.
