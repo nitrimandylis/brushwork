@@ -7,7 +7,7 @@ import { load, save, extractIcc, toBytes } from "./image";
 import { paint } from "./paint";
 import { STYLES, isStyleName, type StyleName } from "./styles";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 const PREVIEW_WIDTH = 1200;
 const SHEET_CELL_WIDTH = 900;
 const SHEET_BRUSHES = [1, 2];

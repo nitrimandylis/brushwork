@@ -1,6 +1,6 @@
 {
   "name": "brushwork",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turn a photograph into a painting made of brush strokes",
   "type": "module",
   "bin": {
