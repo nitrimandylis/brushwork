@@ -89,6 +89,7 @@ package on every one of those.
 
 A full 4K render takes about seven seconds. `--preview` does the same picture at
 1200px in under one, which is what you want while you are still dialling flags in.
+`brushwork --help` lists every flag, and `-V` or `--version` prints the version.
 
 ### For agents
 

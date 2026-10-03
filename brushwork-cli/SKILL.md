@@ -41,12 +41,13 @@ brushwork tower.jpg --style water --json
 | `--brush <n>` | stroke size, scales the whole brush ladder. default 1 |
 | `--detail <n>` | how fine the smallest brush goes. default 1 |
 | `--texture <n>` | substrate, dry brush and relief, 0 to 1. default 1 |
-| `--seed <n>` | same seed, same painting, exactly |
+| `--seed <n>` | same seed, same painting, exactly. default 1 |
 | `--preview` | render at 1200px wide, about a second |
 | `--sheet` | one grid of every style at two brush sizes, textured and bare |
 | `--jpeg` | write jpeg instead of png |
 | `-o, --out <path>` | output file, or a directory for several inputs |
 | `--json` | print results as json instead of a human line |
+| `-V, --version` | print the version |
 
 ## What each one costs
 
@@ -55,7 +56,7 @@ brushwork tower.jpg --style water --json
 | `--preview` | under a second |
 | a full 4K render | 5 to 8 seconds |
 | a full 5K/6K render | 50 seconds and up, disproportionately worse than 4K |
-| `--sheet` | 4 to 6 seconds, it renders twelve previews |
+| `--sheet` | 4 to 6 seconds, it renders 12 cells, each 900px wide whatever `--preview` is set to |
 
 Never fire a full-resolution render just to see whether a style suits an image.
 Use `--preview`, or `--sheet` if the choice of style is the actual question. Say
